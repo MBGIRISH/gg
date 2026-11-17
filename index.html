@@ -49,7 +49,7 @@
 *,*::before,*::after{box-sizing:inherit}
 html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 64px);-webkit-text-size-adjust:100%}
 html,body{max-width:100%;overflow-x:clip}
-body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:17px;line-height:1.65;overflow-x:hidden}
+body{margin:0;background:var(--bg);color:var(--text);font-family:var(--body);font-size:17px;line-height:1.65}
 body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--bg)}
 img{max-width:100%;display:block}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -241,6 +241,9 @@ footer .mono{font-size:2rem}
 /* ---------- floating ---------- */
 #fab{position:fixed;right:18px;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:45;width:58px;height:58px;border-radius:50%;background:#1F8F55;color:#fff;display:grid;place-items:center;border:0;box-shadow:0 10px 24px -8px rgba(0,0,0,.5);cursor:pointer;text-decoration:none}
 #fab svg{width:28px;height:28px}
+#autoBtn{position:fixed;left:18px;bottom:calc(env(safe-area-inset-bottom,0px) + 18px);z-index:45;height:46px;padding:0 16px 0 12px;border-radius:999px;border:1px solid var(--gold);background:var(--surface);color:var(--heading);display:none;align-items:center;gap:8px;font-size:.9rem;font-weight:500;cursor:pointer;box-shadow:0 8px 20px -10px rgba(0,0,0,.45)}
+#autoBtn.show{display:inline-flex}
+#autoBtn svg{width:18px;height:18px}
 #toast{position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 92px);transform:translate(-50%,20px);background:var(--plum);color:#FBEED5;padding:12px 20px;border-radius:999px;z-index:85;opacity:0;transition:.3s;pointer-events:none;max-width:90vw;text-align:center;font-size:.95rem}
 #toast.show{opacity:1;transform:translate(-50%,0)}
 
@@ -540,6 +543,7 @@ th{font-weight:600}
   </div>
 </div>
 
+<button id="autoBtn" type="button" aria-pressed="false"></button>
 <div id="toast" role="status" aria-live="polite"></div>
 
 <script>
@@ -744,14 +748,40 @@ document.body.style.overflow="hidden";
 $("#openBtn").onclick=()=>{
   setMusic(true);
   const g=$("#gate"); g.classList.add("opening");
-  setTimeout(()=>{ g.classList.add("done"); document.body.style.overflow=""; $("#hero h1").setAttribute("tabindex","-1"); $("#hero h1").focus({preventScroll:true}); }, reduce?50:1900);
+  setTimeout(()=>{ g.classList.add("done"); document.body.style.overflow=""; $("#hero h1").setAttribute("tabindex","-1"); $("#hero h1").focus({preventScroll:true});
+    $("#autoBtn").classList.add("show");
+    if(!reduce) setTimeout(startAuto,1200); }, reduce?50:1900);
   setTimeout(()=>g.remove(), reduce?400:2900);
 };
+
+/* ===================== auto-scroll after opening ===================== */
+const AUTO_SPEED = 42;            // pixels per second
+const PAUSE_ICON=`<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg>`;
+const PLAY_ICON=`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>`;
+let autoOn=false, autoRAF=0, autoLast=0, autoPos=0;
+function autoUI(){const b=$("#autoBtn");b.innerHTML=autoOn?PAUSE_ICON+"Pause scroll":PLAY_ICON+"Auto-scroll";b.setAttribute("aria-pressed",String(autoOn));b.setAttribute("aria-label",autoOn?"Pause automatic scrolling":"Start automatic scrolling")}
+function autoStep(t){
+  if(!autoOn) return;
+  if(!autoLast){autoLast=t;autoPos=scrollY}
+  const dt=Math.min(t-autoLast,100); autoLast=t;
+  autoPos+=AUTO_SPEED*dt/1000;
+  const max=document.documentElement.scrollHeight-innerHeight;
+  if(autoPos>=max){window.scrollTo(0,max);stopAuto();return}
+  window.scrollTo(0,autoPos);
+  autoRAF=requestAnimationFrame(autoStep);
+}
+function startAuto(){ if(autoOn) return; autoOn=true; autoLast=0; $("#autoBtn").classList.add("show"); autoUI(); autoRAF=requestAnimationFrame(autoStep) }
+function stopAuto(){ autoOn=false; cancelAnimationFrame(autoRAF); autoUI() }
+$("#autoBtn").onclick=e=>{e.stopPropagation(); autoOn?stopAuto():startAuto()};
+// any touch, wheel, key or form interaction hands control back to the guest
+["touchstart","wheel","keydown","mousedown"].forEach(ev=>window.addEventListener(ev,e=>{ if(autoOn && !e.target.closest("#autoBtn")) stopAuto() },{passive:true}));
+document.addEventListener("focusin",e=>{ if(autoOn && e.target.matches("input,textarea,select")) stopAuto() });
+autoUI();
 
 /* ===================== navigation ===================== */
 document.addEventListener("click",e=>{
   const b=e.target.closest("[data-go]"); if(!b) return;
-  const t=document.getElementById(b.dataset.go); if(!t) return;
+  const t=document.getElementById(b.dataset.go); if(!t) return; stopAuto();
   t.scrollIntoView({behavior:reduce?"auto":"smooth"});
   $("#nav").classList.remove("open"); $("#menuBtn").setAttribute("aria-expanded","false");
 });
